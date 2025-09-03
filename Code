@@ -1,0 +1,592 @@
+Insights.py
+from Parser import get
+_
+filing_
+data
+import nltk
+from transformers import pipeline
+# Download necessary NLTK package for tokenization
+nltk.download('punkt')
+# Initialize the summarization pipeline with a pre-trained T5 model
+summarizer = pipeline('summarization'
+, model='t5-base')
+# Define the model for classifying sentiments of text segments
+classifier
+classifier
+model
+name = 'ProsusAI/finbert'
+_
+_
+_
+emotions = ['positive'
+'neutral'
+,
+,
+'negative']
+# Initialize the classification pipeline with the specified model
+classifier = pipeline('text-classification'
+, model=classifier
+model
+_
+_
+name)
+def find
+"""
+emotional
+_
+_
+sentences(text, emotions, threshold):
+Identify and categorize sentences by their emotional tone based on a defined threshold.
+Args:
+text (str): The complete text to analyze.
+emotions (list): List of emotions to detect.
+threshold (float): Minimum confidence level to consider for classification.
+Returns:
+dict: Dictionary of sentences categorized by emotion.
+"""
+sentences
+_
+by_
+emotion = {e: [] for e in emotions}
+sentences = nltk.sent
+_
+tokenize(text)
+for s in sentences:
+prediction = classifier(s)
+if prediction[0]['label'] != 'neutral' and prediction[0]['score'] > threshold:
+sentences
+_
+by_
+emotion[prediction[0]['label']].append(s)
+return sentences
+_
+by_
+emotion
+def summarize
+"""
+_
+sentences(sentences
+_
+by_
+emotion, min
+_
+length, max
+_
+length):
+Summarize the sentences categorized by emotion.
+Args:
+sentences
+_
+by_
+emotion (dict): Dictionary of sentences categorized by emotion.
+min
+_
+length (int): Minimum length of the summary.
+max
+_
+length (int): Maximum length of the summary.
+Returns:
+dict: Dictionary of summaries for each emotion category.
+"""
+summaries
+_
+by_
+emotion = {}
+for k, sentences in sentences
+_
+by_
+emotion.items():
+if sentences:
+text = ' '
+.join(sentences)
+summary = summarizer(text, min
+_
+length=min
+_
+length, max
+_
+length=max
+_
+length)
+sentences = [sentence.strip() for sentence in summary[0]['summary_
+text'].split('
+.
+') if sentence]
+summaries
+_
+by_
+emotion[k] = sentences
+return summaries
+_
+by_
+emotion
+def filing_
+insight(ticker, filing_year):
+"""
+Generate insights from the filing data for a specific ticker and year.
+Args:
+ticker (str): Stock ticker symbol.
+filing_year (str): Specific year of the filing to analyze.
+Returns:
+dict: Summaries categorized by emotional tone derived from the filing text.
+"""
+df10k = get
+_
+filing_
+data(ticker, 30) # Assuming '30' represents the years of data requested
+# Extract relevant column for analysis
+cols = [col for col in df10k.columns if "ITEM 7.
+" in col.upper()][0]
+text = df10k[df10k['filing_
+date'] == filing_year].iloc[0][cols]
+sentences
+_
+by_
+emotion = find
+emotional
+_
+_
+sentences(text, classifier
+_
+emotions, 0.9)
+return summarize
+_
+sentences(sentences
+_
+by_
+emotion, min
+_
+length=30, max
+_
+length=200)
+Parser.py
+from sec
+_
+downloader import Downloader
+from sec
+_
+downloader.types import RequestedFilings
+import sec
+_parser as sp
+from sec
+_parser.semantic
+elements.semantic
+_
+_
+elements import TextElement
+from sec
+_parser.semantic
+_
+elements.top_
+section
+_
+title import TopSectionTitle
+from sec
+_parser.semantic
+elements.title
+_
+_
+element import TitleElement
+import warnings
+import pandas as pd
+import re
+def create
+"""
+_
+dataframe(ticker, elements, acc
+num, file
+_
+_
+date):
+Create a pandas DataFrame from parsed SEC filing elements.
+Args:
+ticker (str): The stock ticker symbol.
+elements (list): Parsed elements from the SEC filing.
+acc
+_
+num (str): The accession number of the filing.
+file
+_
+date (str): The filing date.
+Returns:
+DataFrame: The DataFrame containing filing details.
+"""
+# Initialize a dictionary to hold the filing data
+data = {
+'ticker': ticker,
+'form
+_
+type': '10-K'
+,
+'accession
+number': acc
+_
+'filing_
+date': file
+date
+_
+num,
+_
+}
+# V ariables to manage current section and text appending
+current
+section = None
+_
+append
+next
+title = False
+_
+_
+# Process each element to build the section and content
+for element in elements:
+if isinstance(element, (TopSectionTitle, TitleElement)):
+text = element.text.strip()
+upper
+_
+text = text.upper()
+# Determine if the text indicates a new section
+if "ITEM" in upper
+_
+text and len(text) < 100:
+if text.endswith('
+.
+'):
+current
+section = text
+_
+append
+next
+title = True
+_
+_
+else:
+current
+section = text
+_
+data[current
+_
+section] = ''
+append
+next
+title = False
+_
+_
+elif append
+next
+_
+_
+title and element.text.isupper():
+current
+section += " " + text
+_
+data[current
+_
+section] = ''
+append
+next
+title = False
+_
+_
+else:
+append
+next
+title = False
+_
+_
+elif isinstance(element, TextElement):
+if current
+section:
+_
+if current
+section not in data:
+_
+data[current
+_
+section] = ''
+data[current
+_
+section] += element.text.strip() + ' '
+# Convert the dictionary to a DataFrame and clean column names
+df = pd.DataFrame([data])
+df.columns = [re.sub(r'\s+'
+,
+' '
+, col).strip() for col in df.columns]
+return df
+def get
+"""
+_
+filing_
+data(ticker, years):
+Retrieve SEC filing data for a specific ticker and time period.
+Args:
+ticker (str): The stock ticker symbol.
+years (int): Number of years of filings to retrieve.
+Returns:
+DataFrame: The DataFrame containing consolidated filing data.
+"""
+email = "harshgupta5439@gmail.com"
+dl = Downloader("Company"
+, email)
+df = pd.DataFrame()
+# Retrieve metadata for filings
+metadatas = dl.get
+_
+filing_
+metadatas(RequestedFilings(ticker
+or
+cik=ticker, form
+_
+_
+_
+type="10-K"
+, limit=years))
+for data in metadatas:
+accesssion
+number = data.accession
+_
+_
+primary_
+doc
+_
+url = data.primary_
+doc
+number
+url
+_
+filing_
+date = data.filing_
+date
+# Download and parse the filing
+html = dl.download
+_
+filing(url=primary_
+doc
+_
+url).decode()
+with warnings.catch
+_
+warnings():
+warnings.filterwarnings("ignore"
+, message="Invalid section type for")
+elements = sp.Edgar10QParser().parse(html)
+row = create
+_
+dataframe(ticker, elements, accesssion
+_
+number, filing_
+date)
+df = pd.concat([df, row], ignore
+_
+index=True)
+return df
+Visualize.py
+import requests
+import pandas as pd
+from datetime import datetime
+import plotly.graph
+_
+objects as go
+def beautify_plot(df, concept):
+"""
+Generate an interactive Plotly graph for time series data of a specified financial concept.
+Args:
+df (DataFrame): The dataframe containing the data.
+concept (str): The financial concept to visualize.
+Returns:
+Plotly Figure: The interactive plot.
+"""
+# Filter the data based on the number of years from current year
+def filter
+_
+data(df, years):
+if years:
+cutoff
+_
+date = datetime.now().year - years
+filtered
+_
+df = df[df['end'].dt.year >= cutoff
+_
+date]
+return filtered
+df
+_
+return df
+# Create a Plotly graph object
+fig = go.Figure()
+# Add traces for various timeframes to the plot
+timeframes = [(5,
+'Last 5 Y ears'), (10,
+'Last 10 Y ears'), (None,
+for years, name in timeframes:
+filtered
+df = filter
+_
+_
+data(df, years)
+fig.add
+_
+trace(go.Scatter(
+x=filtered
+_
+df['end'],
+y=filtered
+_
+df['val'],
+mode='markers+lines'
+,
+marker=dict(size=10, color='green'),
+name=name,
+visible=(name == 'Last 5 Y ears')) # Default view
+'All Time')]
+)
+# Update plot layout
+fig.update
+_
+layout(
+template='plotly_
+white'
+,
+title=f"Time Series Plot for {concept} over Time"
+,
+xaxis
+title="Date"
+,
+_
+yaxis
+_
+title=concept,
+legend
+title
+text='Time Frame'
+,
+_
+_
+title
+x=0.5,
+_
+hovermode='closest'
+,
+margin=dict(l=40, r=40, t=60, b=40)
+)
+# Define buttons for interactivity
+buttons = [
+{"label": name,
+"method": "update"
+,
+for
+, name in timeframes
+"args": [{"visible": [name == frame for
+_
+]
+_
+, frame in timeframes]}]}
+# Add dropdown to switch between timeframes
+fig.update
+_
+layout(
+updatemenus=[
+dict(type="buttons"
+,
+direction="down"
+,
+buttons=buttons,
+pad={"r": 10,
+"t": 10},
+showactive=True,
+x=0.1,
+xanchor="left"
+,
+y=1.1,
+yanchor="top")
+)
+]
+return fig
+def visualise
+"""
+_
+filings(ticker, concept):
+Fetch and visualize filing data for a specific ticker and financial concept.
+Args:
+ticker (str): The stock ticker symbol.
+concept (str): The financial concept to visualize.
+Returns:
+Plotly Figure: Interactive plot of the financial concept over time.
+"""
+# Set the headers for HTTP requests
+headers = {'User-Agent': "harshgupta@gmail.com"}
+# Retrieve company tickers and CIK
+companyTickers = requests.get("https://www.sec.gov/files/company_
+tickers.json"
+, headers=headers)
+companyData = pd.DataFrame.from
+_
+dict(companyTickers.json(), orient='index')
+companyData['cik
+_
+str'] = companyData['cik
+_
+str'].astype(str).str.zfill(10)
+cik = list(companyData[companyData.ticker == ticker].cik
+_
+str)[0]
+# Fetch financial concept data
+companyConcept =
+requests.get(f'https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/{concept}.json'
+,
+headers=headers)
+unit = list(companyConcept.json()['units'].keys())[0]
+conceptData = pd.DataFrame.from
+_
+dict(companyConcept.json()['units'][unit])
+filteredData = conceptData[conceptData.form == '10-Q'].reset
+_
+index(drop=True)
+filteredData['end'] = pd.to
+_
+datetime(filteredData['end'])
+return beautify_plot(filteredData, concept)
+def filing_
+dates(ticker, concept='Assets'):
+"""
+Retrieve filing dates for a specified ticker and concept.
+Args:
+ticker (str): The stock ticker symbol.
+concept (str): The financial concept.
+Returns:
+list: Sorted list of filing dates.
+"""
+headers = {'User-Agent': "harshgupta5439@gmail.com"}
+# Fetch company data and filter by ticker
+companyTickers = requests.get("https://www.sec.gov/files/company_
+tickers.json"
+, headers=headers)
+companyData = pd.DataFrame.from
+_
+dict(companyTickers.json(), orient='index')
+companyData['cik
+_
+str'] = companyData['cik
+_
+str'].astype(str).str.zfill(10)
+cik = list(companyData[companyData.ticker == ticker].cik
+_
+str)[0]
+# Fetch and process the concept data
+companyConcept =
+requests.get(f'https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/{concept}.json'
+,
+headers=headers)
+unit = list(companyConcept.json()['units'].keys())[0]
+conceptData = pd.DataFrame.from
+_
+dict(companyConcept.json()['units'][unit])
+filteredData = conceptData[conceptData.form == '10-K'].reset
+_
+index(drop=True)
+filteredData['end'] = pd.to
+_
+datetime(filteredData['end'])
+dates = sorted(set(filteredData.filed))
+return dates
